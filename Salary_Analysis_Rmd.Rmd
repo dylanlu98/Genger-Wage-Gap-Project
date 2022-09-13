@@ -1,0 +1,642 @@
+---
+title: "3_Combined_Salary_Analysis_4__function_version"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(formattable)
+library(stringr)
+library(colortools)
+# set colors for table
+customGreen0 = "#DeF7E9"
+customGreen = "#71CA97"
+customRed = "#ff7f7f"
+
+set.seed(99)
+
+```
+
+```{r}
+employed_length_dept = read.csv("/Users/lushiting/Documents/Salary Research/Research/Research_Salary_Database/employed_length_dept.csv")
+comb_salary = read.csv("/Users/lushiting/Documents/Salary Research/Research/Research_Salary_Database/6_combined_salary_genderize_dept_4U.csv")
+employed_length_dept2 = employed_length_dept %>% select(2,4,5)
+employed_length_dept2
+head(comb_salary)
+comb_salary = comb_salary %>% arrange(new_Department)
+comb_salary_99 = comb_salary[1:7,7:11]
+head(comb_salary_99)
+#write.table(comb_salary_99, file = "comb_salary_999.txt", sep = ",", quote = FALSE, row.names = F)
+
+```
+
+```{r}
+comb_salary = na.omit(comb_salary) 
+comb_salary = comb_salary %>% arrange(new_Department)
+
+# take out the faculty with month salary less than 3000 dollars 
+comb_salary1 = comb_salary %>% filter(month_salary > 3000) %>% select(-X)
+comb_salary = comb_salary1
+comb_salary$Name = gsub("\\s*\\w*$", "", comb_salary$Name)
+
+#Figure for genderize
+display = comb_salary %>% select(Name, Gender, proportion_male, proportion_female)
+head(display)
+```
+
+```{r}
+unc_salary = comb_salary %>% filter(School == "UNC")
+uw_salary = comb_salary %>% filter(School == "Wisconsin")
+ru_salary = comb_salary %>% filter(School == "Rutgers")
+umich_salary = comb_salary %>% filter(School == "Umich")
+
+schools = c( "Total","UNC", "RU", "UWisconsin", "UMich")
+num_of_obsers = c(nrow(comb_salary),nrow(unc_salary),nrow(uw_salary),nrow(ru_salary),nrow(umich_salary))
+observations = data.frame(Schools = schools, num_of_assistant_professor = num_of_obsers)
+formattable(observations)
+#write.table(observations, file = "num_obeser_school.txt", sep = ",", quote = FALSE, row.names = F)
+
+unc_salary %>% head()
+```
+
+```{r}
+#Adjust RU salary based on Academic Year and Calendar Year
+ru_salary %>% group_by(Title) %>% summarize(n())
+
+#Adjust RU salary based on mean_employment length
+ru_salary %>% group_by(new_Department) %>% summarize(n())
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+ru_salary2 = full_join(ru_salary,employed_length_dept_2,by="new_Department")
+
+ru_salary3 = ru_salary2 %>% mutate(new_month_salary = month_salary * 9 / mean_employed_length)
+
+#Recompute month_salary for those faculty who have 12 month salary (calendar year)
+
+ru_salary4 = ru_salary3 %>% mutate(CY_AY_month_salary = new_month_salary)
+ru_salary4[grep("CY|CAL YR", ru_salary4$Title), ] = ru_salary3[grep("CY|CAL YR", ru_salary3$Title), ] %>% mutate(CY_AY_month_salary = month_salary * 9 / 12)
+
+#Recompute month_salary for those faculty who have 9 month salary (academic year)
+
+ru_salary5 = ru_salary4
+ru_salary5[grep("AY|ACD YR|ACDYR", ru_salary5$Title), ] = ru_salary4[grep("AY|ACD YR|ACDYR", ru_salary4$Title), ] %>% mutate(CY_AY_month_salary = month_salary)
+
+#Check if the new CY_AY_month_salary is computed correctly
+
+ru_salary =  ru_salary5 %>% mutate( nonadjust_salary = month_salary, month_salary = CY_AY_month_salary) %>% select(-c(new_month_salary, CY_AY_month_salary))
+ru_salary$month_salary = ru_salary$month_salary %>% round(2)
+
+test1 = ru_salary %>% filter(str_detect(Title, "CY|CAL YR"))
+sum((test1$month_salary - test1$month_salary * 9 /12) <= 0.1)
+
+test2 = ru_salary %>% filter(str_detect(Title, "AY|ACD YR|ACDYR"))
+sum(test2$month_salary == test2$month_salary)
+
+
+```
+
+```{r}
+#Adjust Wisconsin salary based on mean_employment length
+uw_salary %>% group_by(new_Department) %>% summarize(n())
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+uw_salary2 = full_join(uw_salary,employed_length_dept_2,by="new_Department")
+
+# Check if the join is correct
+#View(uw_salary2 %>% group_by(new_Department) %>% summarize(mean(mean_employed_length)))
+uw_salary3 = uw_salary2 %>% mutate(new_month_salary = month_salary * 9 / mean_employed_length)
+#View(uw_salary3 %>% select(new_Department,month_salary, new_month_salary, mean_employed_length))
+
+uw_salary = uw_salary3 %>% mutate( nonadjust_salary = month_salary, month_salary = new_month_salary) %>% select(-new_month_salary)
+head(uw_salary)
+```
+
+```{r}
+#Adjust Michigan salary based on mean_employment length
+
+umich_salary %>% group_by(new_Department) %>% summarize(n())
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+umich_salary2 = full_join(umich_salary,employed_length_dept_2,by="new_Department")
+umich_salary2 = na.omit(umich_salary2)
+# Check if the join is correct
+#View(umich_salary2 %>% group_by(new_Department) %>% summarize(mean(mean_employed_length)))
+
+umich_salary3 = umich_salary2 %>% mutate(new_month_salary = month_salary * 9 / mean_employed_length)
+
+#View(umich_salary3 %>% select(new_Department,month_salary, new_month_salary, mean_employed_length))
+
+umich_salary = umich_salary3 %>% mutate( nonadjust_salary = month_salary, month_salary = new_month_salary) %>% select(-new_month_salary)
+head(umich_salary)
+#View(umich_salary %>% select(month_salary))
+```
+
+```{r}
+#Recreate a comb_salary dataset by combing data from four universities
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+unc_salary2 = full_join(unc_salary,employed_length_dept_2,by="new_Department")
+unc_salary3 = unc_salary2 %>% mutate(nonadjust_salary = month_salary)
+unc_salary = unc_salary3 
+
+comb_salary = rbind(umich_salary, uw_salary, ru_salary, unc_salary)
+
+#Arrage the combined dataset so that it is orderd by new department name
+comb_salary1 = comb_salary %>% arrange(new_Department)
+comb_salary = comb_salary1
+
+#Remove two outliers with month salary >= 400000 and are belong to clinic or surgery department
+comb_salary2 = comb_salary %>% filter(month_salary <= 100000)
+comb_salary = comb_salary2
+```
+
+
+```{r}
+#func.pvals computes the p-values of mean and minimal after permutation test
+func.pvals= function(output){
+  #create a rank matrix based on the output matrix of male and female cumsum difference
+  output_rank_t = NULL
+  output_rank = NULL
+  for(i in 1:ncol(output)){
+    output_rank_t = rbind(output_rank_t,rank(output[,i],ties.method = "first"))
+  }
+  output_rank =  t(output_rank_t)
+  
+  #Compute the min and mean in each row of the rank matrix
+  mins = apply(output_rank,1,min)
+  means = apply(output_rank,1,mean)
+  #Set the original min and mean belong to male and femlae cumsum difference as min0     and mean0
+  min0 = mins[1]
+  mean0 = means[1]
+  
+  #Compute the frequency when min0 >= min[i] and mean0 >= mean[i]
+  sum_mins = 0
+  sum_means = 0
+  for(i in 2:length(mins)){
+    sum_mins = sum_mins + sum(min0>=mins[i])
+    sum_means = sum_means + sum(mean0>=means[i])
+  }
+  p_min = sum_mins/(length(mins)-1)
+  p_mean = sum_means/(length(means)-1)
+  #The final p value
+  
+  p1 = hist(mins, main = "Histogram of permuted minimals")
+  abline(v=min0,col="blue")
+  
+  p2 = hist(means, main = "Histogram of permuted means")
+  abline(v=mean0,col="blue")
+  
+  print(tibble(p_val_min = p_min, p_val_mean = p_mean))
+  print(list(p1,p2))
+  return(data.frame(p_min,p_mean))
+  
+}
+```
+
+
+```{r, eval=T}
+#Visualization and Permutation for combined salary - random sample within population
+
+
+comb_salary$order = order(comb_salary$month_salary)
+
+male_cumsum = cumsum(comb_salary$proportion_male[comb_salary$order])/sum(comb_salary$proportion_male)
+
+female_cumsum = cumsum(comb_salary$proportion_female[comb_salary$order])/sum(comb_salary$proportion_female)
+
+# Define the position of tick marks
+v1 = c(0, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6)
+
+# Define the labels of tick marks
+temp = round(10^(v1))
+v2 = as.character(round(10^(v1),0))
+
+#jpeg("rplot.jpg", width = 600, height = 300, quality = 100)
+#jpeg("Plot1.jpeg", width = 8, height = 6, units = 'in', res = 300)
+# Plot the ecdf, male in green and femlae in purple
+plot(log10(comb_salary$month_salary[comb_salary$order]), male_cumsum, col="#00FF00",
+     xlab = "month_salary", ylab = "probability", main  = "ECDF: salary(log10)", type = "l", panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+points(log10(comb_salary$month_salary[comb_salary$order]), female_cumsum, col="#FF00FF", type = "l")
+#dev.off()
+
+plot(log10(comb_salary$month_salary[comb_salary$order]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="black",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l",panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+#jpeg("plot2.jpeg", width = 8, height = 6, units = 'in', res = 300)
+# Plot the difference between male and female faculty
+plot(log10(comb_salary$month_salary[comb_salary$order]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="white",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l", panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+# Permutation test
+
+#Create an output matrix
+output = NULL
+output = rbind(output,male_cumsum-female_cumsum )
+
+for(i in 1:1000){
+  random_order=sample(length(comb_salary$proportion_male),length(comb_salary$proportion_male), replace = TRUE)
+random_male_cumsum = cumsum(comb_salary$proportion_male[random_order])/sum(comb_salary$proportion_male[random_order])
+
+random_female_cumsum = cumsum(comb_salary$proportion_female[random_order])/sum(comb_salary$proportion_female[random_order])
+
+points(log10(comb_salary$month_salary[comb_salary$order]), random_male_cumsum-random_female_cumsum, col="blue",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of male and female salaries", type = "l")
+
+#Create a matrix with permutated difference
+output = rbind(output,random_male_cumsum-random_female_cumsum )
+
+}
+points(log10(comb_salary$month_salary[comb_salary$order]), male_cumsum-female_cumsum, col="black", type = "l")
+#dev.off()
+#Computed p-value
+func.pvals(output)
+
+
+```
+
+```{r,eval=T}
+#Visualization and Permutation for combined salary - random sample within department
+
+flagbad = 0 
+orders=data.frame(month_salary = order(comb_salary$month_salary))
+
+male_cumsum = cumsum(comb_salary$proportion_male[orders$month_salary])/sum(comb_salary$proportion_male)
+
+female_cumsum = cumsum(comb_salary$proportion_female[orders$month_salary])/sum(comb_salary$proportion_female)
+
+# Define the position of tick marks
+v1 = c(0, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6)
+
+# Define the labels of tick marks
+temp = round(10^(v1))
+v2 = as.character(round(10^(v1),0))
+
+# Plot the ecdf
+plot(log10(comb_salary$month_salary[orders$month_salary]), male_cumsum,  col="red",
+     xlab = "month_salary", ylab = "probability", main  = "ECDF: salary(log10)", type = "l", panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+points(log10(comb_salary$month_salary[orders$month_salary]), female_cumsum, col="green", type = "l")
+
+plot(log10(comb_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="black",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l",panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+#jpeg("plot3.jpeg", width = 8, height = 6, units = 'in', res = 300)
+
+# Plot the difference between male and female faculty
+plot(log10(comb_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="white",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l", panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+# Permutation test
+
+#Create an output matrix
+output = NULL
+output = rbind(output,male_cumsum-female_cumsum )
+
+for(i in 1:1000){
+#Random sample the order of the salary
+
+orders$random=comb_salary%>%group_by(new_Department)%>%sample_frac(1,replace = FALSE)%>%ungroup()%>%transmute(order = order(month_salary))
+
+random_male_cumsum = cumsum(comb_salary$proportion_male[orders$random$order])/sum(comb_salary$proportion_male[orders$random$order])
+
+random_female_cumsum = cumsum(comb_salary$proportion_female[orders$random$order])/sum(comb_salary$proportion_female[orders$random$order])
+
+points(log10(comb_salary$month_salary[orders$month_salary]), random_male_cumsum-random_female_cumsum, col="blue",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of male and female salaries", type = "l")
+
+#Create a matrix with permutated difference
+output = rbind(output,random_male_cumsum-random_female_cumsum )
+
+}
+points(log10(comb_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, col="black", type = "l")
+#dev.off()
+#Compute p-value
+p_values = func.pvals(output)
+p_values2 = p_values %>% `row.names<-`("Combined Data")
+p_values2 = cbind(Data = rownames(p_values2), p_values2)
+rownames(p_values2) = NULL
+formattable(p_values2)
+
+
+```
+
+
+```{r}
+#Visualization and Permutation for UNC system salary - random sample within department
+
+orders=data.frame(month_salary = order(unc_salary$month_salary))
+
+male_cumsum = cumsum(unc_salary$proportion_male[orders$month_salary])/sum(unc_salary$proportion_male)
+
+female_cumsum = cumsum(unc_salary$proportion_female[orders$month_salary])/sum(unc_salary$proportion_female)
+
+# Define the position of tick marks
+v1 = c(0,3.6, 3.8 ,4.0, 4.2, 4.4, 4.6)
+
+# Define the labels of tick marks
+temp = round(10^(v1))
+v2 = as.character(round(10^(v1),0))
+
+# Plot the ecdf
+plot(log10(unc_salary$month_salary[orders$month_salary]), male_cumsum, col="red",
+     xlab = "month_salary", ylab = "probability", main  = "ECDF: salary(log10)", type = "l", panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+points(log10(unc_salary$month_salary[orders$month_salary]), female_cumsum, col="green", type = "l")
+
+plot(log10(unc_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="black",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l",panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+#jpeg("unc.jpeg", width = 8, height = 6, units = 'in', res = 300)
+
+# Plot the difference between male and female faculty
+plot(log10(unc_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="white",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "University of North Carolina", type = "l", panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+# Permutation test
+
+#Create an output matrix
+output = NULL
+output = rbind(output,male_cumsum-female_cumsum )
+
+for(i in 1:1000){
+#Random sample the order of the salary
+
+orders$random=unc_salary%>%group_by(new_Department)%>%sample_frac(1,replace = FALSE)%>%ungroup()%>%transmute(order = order(month_salary))
+
+random_male_cumsum = cumsum(unc_salary$proportion_male[orders$random$order])/sum(unc_salary$proportion_male[orders$random$order])
+
+random_female_cumsum = cumsum(unc_salary$proportion_female[orders$random$order])/sum(unc_salary$proportion_female[orders$random$order])
+
+points(log10(unc_salary$month_salary[orders$month_salary]), random_male_cumsum-random_female_cumsum, col="blue",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of male and female salaries", type = "l")
+
+#Create a matrix with permutated difference
+output = rbind(output,random_male_cumsum-random_female_cumsum )
+
+}
+points(log10(unc_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, col="black", type = "l")
+#dev.off()
+p_list1 = func.pvals(output)
+```
+
+
+```{r}
+#Visualization and Permutation for Rutgers system salary - random sample within department
+orders=data.frame(month_salary = order(ru_salary$month_salary))
+
+male_cumsum = cumsum(ru_salary$proportion_male[orders$month_salary])/sum(ru_salary$proportion_male)
+
+female_cumsum = cumsum(ru_salary$proportion_female[orders$month_salary])/sum(ru_salary$proportion_female)
+
+# Define the position of tick marks
+v1 = c(0, 3.8, 4.0, 4.2, 4.4, 4.6)
+
+# Define the labels of tick marks
+temp = round(10^(v1))
+v2 = as.character(round(10^(v1),0))
+
+# Plot the ecdf
+plot(log10(ru_salary$month_salary[orders$month_salary]), male_cumsum, xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="red",
+     xlab = "month_salary", ylab = "probability", main  = "ECDF: salary(log10)", type = "l", panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+points(log10(ru_salary$month_salary[orders$month_salary]), female_cumsum, col="green", type = "l")
+
+plot(log10(ru_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, col="black",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l",panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+#jpeg("rutgers.jpeg", width = 8, height = 6, units = 'in', res = 300)
+# Plot the difference between male and female faculty
+plot(log10(ru_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.2,0.2), col="white",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Rutgers University", type = "l", panel.first = grid(),xaxt="n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+# Permutation test
+
+#Create an output matrix
+output = NULL
+output = rbind(output,male_cumsum-female_cumsum )
+
+for(i in 1:1000){
+#Random sample the order of the salary
+
+orders$random=ru_salary%>%group_by(new_Department)%>%sample_frac(1,replace = FALSE)%>%ungroup()%>%transmute(order = order(month_salary))
+
+random_male_cumsum = cumsum(ru_salary$proportion_male[orders$random$order])/sum(ru_salary$proportion_male[orders$random$order])
+
+random_female_cumsum = cumsum(ru_salary$proportion_female[orders$random$order])/sum(ru_salary$proportion_female[orders$random$order])
+
+points(log10(ru_salary$month_salary[orders$month_salary]), random_male_cumsum-random_female_cumsum, col="blue",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Rutgers University", type = "l")
+
+#Create a matrix with permutated difference
+output = rbind(output,random_male_cumsum-random_female_cumsum )
+}
+points(log10(ru_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, col="black", type = "l")
+#dev.off()
+p_list2 = func.pvals(output)
+```
+
+
+
+```{r}
+#Visualization and Permutation for Wisconsin system salary - random sample within department
+
+
+orders=data.frame(month_salary = order(uw_salary$month_salary))
+
+male_cumsum = cumsum(uw_salary$proportion_male[orders$month_salary])/sum(uw_salary$proportion_male)
+
+female_cumsum = cumsum(uw_salary$proportion_female[orders$month_salary])/sum(uw_salary$proportion_female)
+
+# Define the position of tick marks
+v1 = c(0, 3.8, 4.0, 4.2, 4.4, 4.6)
+
+# Define the labels of tick marks
+temp = round(10^(v1))
+v2 = as.character(round(10^(v1),0))
+
+
+# Plot the ecdf
+plot(log10(uw_salary$month_salary[orders$month_salary]), male_cumsum,col="red",
+     xlab = "month_salary", ylab = "probability", main  = "ECDF: salary(log10)", type = "l", panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+points(log10(uw_salary$month_salary[orders$month_salary]), female_cumsum, col="green", type = "l")
+
+plot(log10(uw_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, xlim=c(3.5,4.7), ylim=c(-0.15,0.15),col="black",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l",panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+#jpeg("wisconsin.jpeg", width = 8, height = 6, units = 'in', res = 300)
+
+# Plot the difference between male and female faculty
+plot(log10(uw_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, xlim=c(3.5,4.7),ylim=c(-0.15,0.15),col="white",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "University of Wisconsin", type = "l", panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+# Permutation test
+
+#Create an output matrix
+output = NULL
+output = rbind(output,male_cumsum-female_cumsum )
+
+for(i in 1:1000){
+#Random sample the order of the salary
+
+orders$random=uw_salary%>%group_by(new_Department)%>%sample_frac(1,replace = FALSE)%>%ungroup()%>%transmute(order = order(month_salary))
+
+random_male_cumsum = cumsum(uw_salary$proportion_male[orders$random$order])/sum(uw_salary$proportion_male[orders$random$order])
+
+random_female_cumsum = cumsum(uw_salary$proportion_female[orders$random$order])/sum(uw_salary$proportion_female[orders$random$order])
+
+points(log10(uw_salary$month_salary[orders$month_salary]), random_male_cumsum-random_female_cumsum, col="blue",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of male and female salaries", type = "l")
+
+#Create a matrix with permutated difference
+output = rbind(output,random_male_cumsum-random_female_cumsum )
+
+}
+points(log10(uw_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, col="black", type = "l")
+#dev.off()
+p_list3 = func.pvals(output)
+
+
+```
+
+```{r}
+#Visualization and Permutation for Umich system salary - random sample within department
+
+orders=data.frame(month_salary = order(umich_salary$month_salary))
+
+male_cumsum = cumsum(umich_salary$proportion_male[orders$month_salary])/sum(umich_salary$proportion_male)
+
+female_cumsum = cumsum(umich_salary$proportion_female[orders$month_salary])/sum(umich_salary$proportion_female)
+
+# Define the position of tick marks
+v1 = c(0, 3.8, 4.0, 4.2, 4.4, 4.6)
+
+# Define the labels of tick marks
+temp = round(10^(v1))
+v2 = as.character(round(10^(v1),0))
+
+# Plot the ecdf
+plot(log10(umich_salary$month_salary[orders$month_salary]), male_cumsum, col="red",
+     xlab = "month_salary", ylab = "probability", main  = "ECDF: salary(log10)", type = "l", panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+points(log10(umich_salary$month_salary[orders$month_salary]), female_cumsum, col="green", type = "l")
+
+plot(log10(umich_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="black",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "Difference of Male and Female Emperical Distributions", type = "l",panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+#jpeg("umich.jpeg", width = 8, height = 6, units = 'in', res = 300)
+
+# Plot the difference between male and female faculty
+plot(log10(umich_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum,xlim=c(3.5,4.7), ylim=c(-0.15,0.15), col="white",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "University of Michigan", type = "l", panel.first = grid(), xaxt = "n")
+axis(side = 1, 
+     at = v1, 
+     labels = v2,
+     tck=-.05)
+
+# Permutation test
+#Create an output matrix
+output = NULL
+output = rbind(output,male_cumsum-female_cumsum )
+
+for(i in 1:1000){
+#Random sample the order of the salary
+
+orders$random=umich_salary%>%group_by(new_Department)%>%sample_frac(1,replace = FALSE)%>%ungroup()%>%transmute(order = order(month_salary))
+
+random_male_cumsum = cumsum(umich_salary$proportion_male[orders$random$order])/sum(umich_salary$proportion_male[orders$random$order])
+
+random_female_cumsum = cumsum(umich_salary$proportion_female[orders$random$order])/sum(umich_salary$proportion_female[orders$random$order])
+
+points(log10(umich_salary$month_salary[orders$month_salary]), random_male_cumsum-random_female_cumsum, col="blue",
+     xlab = "month_salary", ylab = "difference of cdf", main  = "University of Michigan", type = "l")
+
+#Create a matrix with permutated difference
+output = rbind(output,random_male_cumsum-random_female_cumsum )
+
+}
+points(log10(umich_salary$month_salary[orders$month_salary]), male_cumsum-female_cumsum, col="black", type = "l")
+#dev.off()
+p_list4 = func.pvals(output)
+```
+
+```{r}
+p_values3 = p_values %>% `row.names<-`("Combined Data")
+p_values3 = cbind(Schools = rownames(p_values3), p_values3)
+rownames(p_values3) = NULL
+formattable(p_values3)
+
+p_lists = rbind(p_list1, p_list2,p_list3,p_list4)
+p_lists
+p_lists2 = p_lists %>% `row.names<-`(c("UNC","RU","UWiscosin","UMich"))
+p_lists2 =  cbind(Schools = rownames(p_lists2), p_lists2)
+rownames(p_lists2) = NULL
+p_lists_final = rbind(p_values3,p_lists2)
+p_lists_final_2 = p_lists_final %>% select(-"p_min")
+formattable(p_lists_final_2)
+#write.table(p_lists_final, file = "p_lists_final.txt", sep = ",", quote = FALSE, row.names = F)
+
+```
+

@@ -1,0 +1,149 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(formattable)
+library(stringr)
+library(colortools)
+# set colors for table
+customGreen0 = "#DeF7E9"
+customGreen = "#71CA97"
+customRed = "#ff7f7f"
+
+set.seed(99)
+
+```
+
+```{r}
+employed_length_dept = read.csv("/Users/lushiting/Dropbox/Salary Research/Research/Research_Salary_Database/employed_length_dept.csv")
+comb_salary = read.csv("/Users/lushiting/Dropbox/Salary Research/Research/Research_Salary_Database/6_combined_salary_genderize_dept_4U.csv")
+employed_length_dept2 = employed_length_dept %>% select(2,4,5)
+employed_length_dept2
+head(comb_salary)
+comb_salary = comb_salary %>% arrange(new_Department)
+comb_salary_99 = comb_salary[1:7,7:11]
+head(comb_salary_99)
+#write.table(comb_salary_99, file = "comb_salary_999.txt", sep = ",", quote = FALSE, row.names = F)
+
+```
+
+```{r}
+# Remove 24 observation that doesn't have a new department assigned to 
+comb_salary = na.omit(comb_salary) 
+comb_salary = comb_salary %>% arrange(new_Department) %>% select(-X)
+
+comb_salary$Name = gsub("\\s*\\w*$", "", comb_salary$Name)
+
+#Figure for genderize
+display = comb_salary %>% select(Name, Gender, proportion_male, proportion_female)
+head(display)
+```
+```{r}
+#mean_salary_department_table = comb_salary %>% na.omit() %>% group_by(new_Department) %>% summarize(mean_salary = sprintf("%0.0f",mean(month_salary)), n())
+#mean_salary_department_table
+```
+
+```{r}
+unc_salary = comb_salary %>% filter(School == "UNC")
+uw_salary = comb_salary %>% filter(School == "Wisconsin")
+ru_salary = comb_salary %>% filter(School == "Rutgers")
+umich_salary = comb_salary %>% filter(School == "Umich")
+
+schools = c( "Total","UNC", "RU", "UWisconsin", "UMich")
+num_of_obsers = c(nrow(comb_salary),nrow(unc_salary),nrow(uw_salary),nrow(ru_salary),nrow(umich_salary))
+observations = data.frame(Schools = schools, num_of_assistant_professor = num_of_obsers)
+formattable(observations)
+#write.table(observations, file = "num_obeser_school.txt", sep = ",", quote = FALSE, row.names = F)
+
+unc_salary %>% head()
+```
+
+```{r}
+#Adjust RU salary based on Academic Year and Calendar Year
+ru_salary %>% group_by(Title) %>% summarize(n())
+
+#Adjust RU salary based on mean_employment length
+ru_salary %>% group_by(new_Department) %>% summarize(n())
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+ru_salary2 = full_join(ru_salary,employed_length_dept_2,by="new_Department")
+
+ru_salary3 = ru_salary2 %>% mutate(new_month_salary = month_salary * 9 / mean_employed_length)
+
+#Recompute month_salary for those faculty who have 12 month salary (calendar year)
+
+ru_salary4 = ru_salary3 %>% mutate(CY_AY_month_salary = new_month_salary)
+ru_salary4[grep("CY|CAL YR", ru_salary4$Title), ] = ru_salary3[grep("CY|CAL YR", ru_salary3$Title), ] %>% mutate(CY_AY_month_salary = month_salary * 9 / 12)
+
+#Recompute month_salary for those faculty who have 9 month salary (academic year)
+
+ru_salary5 = ru_salary4
+ru_salary5[grep("AY|ACD YR|ACDYR", ru_salary5$Title), ] = ru_salary4[grep("AY|ACD YR|ACDYR", ru_salary4$Title), ] %>% mutate(CY_AY_month_salary = month_salary)
+
+#Check if the new CY_AY_month_salary is computed correctly
+
+ru_salary =  ru_salary5 %>% mutate( nonadjust_salary = month_salary, month_salary = CY_AY_month_salary) %>% select(-c(new_month_salary, CY_AY_month_salary))
+ru_salary$month_salary = ru_salary$month_salary %>% round(2)
+
+test1 = ru_salary %>% filter(str_detect(Title, "CY|CAL YR"))
+sum((test1$month_salary - test1$month_salary * 9 /12) <= 0.1)
+
+test2 = ru_salary %>% filter(str_detect(Title, "AY|ACD YR|ACDYR"))
+sum(test2$month_salary == test2$month_salary)
+
+
+```
+
+```{r}
+#Adjust Wisconsin salary based on mean_employment length
+uw_salary %>% group_by(new_Department) %>% summarize(n())
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+uw_salary2 = full_join(uw_salary,employed_length_dept_2,by="new_Department")
+
+# Check if the join is correct
+#View(uw_salary2 %>% group_by(new_Department) %>% summarize(mean(mean_employed_length)))
+uw_salary3 = uw_salary2 %>% mutate(new_month_salary = month_salary * 9 / mean_employed_length)
+#View(uw_salary3 %>% select(new_Department,month_salary, new_month_salary, mean_employed_length))
+
+uw_salary = uw_salary3 %>% mutate( nonadjust_salary = month_salary, month_salary = new_month_salary) %>% select(-new_month_salary)
+head(uw_salary)
+```
+
+```{r}
+#Adjust Michigan salary based on mean_employment length
+
+umich_salary %>% group_by(new_Department) %>% summarize(n())
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+umich_salary2 = full_join(umich_salary,employed_length_dept_2,by="new_Department")
+umich_salary2 = na.omit(umich_salary2)
+# Check if the join is correct
+#View(umich_salary2 %>% group_by(new_Department) %>% summarize(mean(mean_employed_length)))
+
+umich_salary3 = umich_salary2 %>% mutate(new_month_salary = month_salary * 9 / mean_employed_length)
+
+#View(umich_salary3 %>% select(new_Department,month_salary, new_month_salary, mean_employed_length))
+
+umich_salary = umich_salary3 %>% mutate( nonadjust_salary = month_salary, month_salary = new_month_salary) %>% select(-new_month_salary)
+head(umich_salary)
+#View(umich_salary %>% select(month_salary))
+```
+
+```{r}
+#Recreate a comb_salary dataset by combing data from four universities
+employed_length_dept_2 = employed_length_dept %>% select(c(2,4))
+unc_salary2 = full_join(unc_salary,employed_length_dept_2,by="new_Department")
+unc_salary3 = unc_salary2 %>% mutate(nonadjust_salary = month_salary)
+unc_salary = unc_salary3 
+
+comb_salary = rbind(umich_salary, uw_salary, ru_salary, unc_salary)
+
+#Arrage the combined dataset so that it is orderd by new department name
+comb_salary1 = comb_salary %>% arrange(new_Department)
+comb_salary = comb_salary1
+
+#Remove extreme salary which are annual salary <= 10000 or >= 175000
+comb_salary %>% filter(month_salary>= 1111.11 & month_salary <=19400)
+```
